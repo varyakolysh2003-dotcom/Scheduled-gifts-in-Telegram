@@ -11,20 +11,20 @@
     ],
   },
   "files": [
-    { "kind": "folder", "path": "еtelegram", "target-membership": [ "еtelegram" ] },
+    { "kind": "folder", "path": "Telegram-iOS", "target-membership": [ "Telegram-iOS" ] },
     {
       "kind": "group",
       "name": "Products",
       "children": [
-        { "path": "<PRODUCTS>/еtelegram.app", "id": "000000000000000000000120", "type": "wrapper.application", "index": false },
+        { "path": "<PRODUCTS>/Telegram-iOS.app", "id": "000000000000000000000120", "type": "wrapper.application", "index": false },
       ],
     },
   ],
   "targets": [
     {
-      "name": "еtelegram",
+      "name": "Telegram-iOS",
       "id": "000000000000000100000000",
-      "product": "Products/еtelegram.app",
+      "product": "Products/Telegram-iOS.app",
       "product-type": "application",
       "build-phases": [
         "compile-sources",

@@ -10,7 +10,7 @@ once it is sent it lands in the chat with a burst of balloons.
 
 A standalone SwiftUI concept app built from the Figma frames, in Telegram's look: SwiftUI, UIKit and WebKit only, no
 third-party packages, no server. Three Swift files (about 2,000 lines), Telegram's animated stickers bundled with the
-app. Builds with Xcode for the iOS Simulator (`еtelegram` scheme, Debug).
+app. Builds with Xcode for the iOS Simulator (`Telegram-iOS` scheme, Debug).
 
 ## How it works
 
@@ -39,8 +39,8 @@ app. Builds with Xcode for the iOS Simulator (`еtelegram` scheme, Debug).
 
 | Path | What |
 |---|---|
-| `еtelegram/` | The app's sources and resources. |
-| `еtelegram.xcodeproj` | The Xcode project. |
+| `Telegram-iOS/` | The app's sources and resources. |
+| `Telegram-iOS.xcodeproj` | The Xcode project. |
 | `Media/scheduled-gifts.mp4` | Demo. |
 | `Media/preview.jpg` | Stills from the demo. |
 
@@ -60,8 +60,8 @@ Where the code lives:
 
 ## Run
 
-Open `еtelegram.xcodeproj` in Xcode (iOS 27.2 SDK or later), pick the `еtelegram` scheme and an iPhone simulator, and
-run. The project and target names start with a Cyrillic `е`.
+Open `Telegram-iOS.xcodeproj` in Xcode (iOS 27.2 SDK or later), pick the `Telegram-iOS` scheme and an iPhone simulator, and
+run.
 
 ## Notes and limits
 
