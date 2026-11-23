@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Star Particles</title>
+<style>
+  /* Прозрачный фон: страница и canvas ничего не заливают */
+  html, body { margin: 0; height: 100%; background: transparent; }
+  body { display: flex; align-items: center; justify-content: center; }
+  /* Область частиц: пропорции как в исходном видео (592 × 220) */
+  .stars {
+    position: relative;
+    width: min(592px, 100vw);
+    aspect-ratio: 592 / 220;
+  }
+  .stars canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<div class="stars" id="stars"><canvas></canvas></div>
+
+<script>
+/*
+ * Реконструкция частиц-звёзд из шторки «Подарить Premium» в Telegram.
+ * Все размеры заданы в «пикселях исходного видео» (ширина 592) и масштабируются под контейнер.
+ */
+const CONFIG = {
+  baseWidth: 592,
+  baseHeight: 220,
+  center: { x: 296, y: 110 },  // центр (там, где был аватар)
+  holeRadius: 72,              // пустая зона под аватар — частицы туда не попадают
+  areaRadius: { x: 210, y: 105 }, // эллипс, в котором разбросаны частицы
+  count: 64,                   // число частиц одновременно
+  starShare: 0.55,             // доля пятиконечных звёзд (остальное — искры)
+  premiumShare: 0.45,          // доля звёзд формы Telegram Premium среди пятиконечных
+  life: [1.6, 3.2],            // время жизни частицы, сек
+  fadeIn: 0.25,                // доля жизни на появление
+  fadeOut: 0.35,               // доля жизни на исчезновение
+  speed: [4, 14],              // дрейф от центра, px/сек
+  starSize: [6, 10.5],         // «радиус» звезды
+  sparkleSize: [6, 15],        // половина длины луча искры
+  rotation: [-25, 25],         // скорость вращения, °/сек
+  colors: ['#f7c843', '#f5a636', '#f1832f', '#ee5f2b'],
+};
+
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[(Math.random() * arr.length) | 0];
+
+/* ---------- формы ---------- */
+
+// Пятиконечная звезда со скруглёнными углами (скругления через arcTo — одна заливка без обводки)
+function starPath(ctx, r) {
+  const pts = [];
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.48;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    pts.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+  }
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  ctx.beginPath();
+  ctx.moveTo(...mid(pts[9], pts[0]));
+  for (let i = 0; i < 10; i++) {
+    const p = pts[i], next = mid(p, pts[(i + 1) % 10]);
+    ctx.arcTo(p[0], p[1], next[0], next[1], i % 2 === 0 ? r * 0.09 : r * 0.05);
+  }
+  ctx.closePath();
+}
+
+// Звезда Telegram Premium (из telegram_premium_star 1.svg, viewBox 14×15)
+const PREMIUM_STAR = new Path2D('M6.63869 12.1902L3.50621 14.1092C3.18049 14.3087 2.75468 14.2064 2.55515 13.8807C2.45769 13.7216 2.42864 13.5299 2.47457 13.3491L2.95948 11.4405C3.13452 10.7515 3.60599 10.1756 4.24682 9.86791L7.6642 8.22716C7.82352 8.15067 7.89067 7.95951 7.81418 7.80019C7.75223 7.67116 7.61214 7.59896 7.47111 7.62338L3.66713 8.28194C2.89387 8.41581 2.1009 8.20228 1.49941 7.69823L0.297703 6.69116C0.00493558 6.44581 -0.033506 6.00958 0.211842 5.71682C0.33117 5.57442 0.502766 5.48602 0.687982 5.47153L4.35956 5.18419C4.61895 5.16389 4.845 4.99974 4.94458 4.75937L6.36101 1.3402C6.5072 0.987302 6.91179 0.819734 7.26469 0.965925C7.43413 1.03612 7.56876 1.17075 7.63896 1.3402L9.05539 4.75937C9.15496 4.99974 9.38101 5.16389 9.6404 5.18419L13.3322 5.47311C13.713 5.50291 13.9975 5.83578 13.9677 6.2166C13.9534 6.39979 13.8667 6.56975 13.7269 6.68896L10.9114 9.08928C10.7131 9.25826 10.6267 9.52425 10.6876 9.77748L11.5532 13.3733C11.6426 13.7447 11.414 14.1182 11.0427 14.2076C10.8642 14.2506 10.676 14.2208 10.5195 14.1249L7.36128 12.1902C7.13956 12.0544 6.8604 12.0544 6.63869 12.1902Z');
+
+function drawPremiumStar(ctx, r, color) {
+  const s = (r * 2.1) / 14;          // ширина звезды ≈ 2.1·r, как у обычной
+  ctx.scale(s, s);
+  ctx.translate(-7, -7.6);           // центр фигуры в (0,0)
+  ctx.fillStyle = color;
+  ctx.fill(PREMIUM_STAR, 'evenodd');
+  const g = ctx.createLinearGradient(0, 0, 0, 15);
+  g.addColorStop(0, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.12)');
+  ctx.fillStyle = g;
+  ctx.fill(PREMIUM_STAR, 'evenodd');
+}
+
+function drawStar(ctx, r, color) {
+  starPath(ctx, r);
+  ctx.fillStyle = color;
+  ctx.fill();
+  // лёгкий объём: светлый блик сверху, тень снизу
+  const g = ctx.createLinearGradient(0, -r, 0, r);
+  g.addColorStop(0, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.12)');
+  ctx.fillStyle = g;
+  ctx.fill();
+}
+
+// Четырёхлучевая искра с вогнутыми гранями и мягким свечением
+function drawSparkle(ctx, r, color) {
+  const w = r * 0.09; // толщина у центра
+  ctx.save();
+  ctx.shadowColor = color;
+  ctx.shadowBlur = r * 0.6;
+  ctx.beginPath();
+  ctx.moveTo(0, -r);
+  ctx.quadraticCurveTo(w, -w, r, 0);
+  ctx.quadraticCurveTo(w, w, 0, r);
+  ctx.quadraticCurveTo(-w, w, -r, 0);
+  ctx.quadraticCurveTo(-w, -w, 0, -r);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+  // светлая сердцевина
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.35);
+  core.addColorStop(0, 'rgba(255,240,200,0.75)');
+  core.addColorStop(1, 'rgba(255,240,200,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/* ---------- частицы ---------- */
+
+class Particle {
+  constructor(initial) { this.reset(initial); }
+
+  reset(initial) {
+    const { center, holeRadius, areaRadius } = CONFIG;
+    // случайная точка в эллипсе, но вне круга аватара
+    let x, y, nx, ny;
+    do {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random());
+      nx = Math.cos(a); ny = Math.sin(a);
+      x = center.x + nx * d * areaRadius.x;
+      y = center.y + ny * d * areaRadius.y;
+    } while (Math.hypot(x - center.x, y - center.y) < holeRadius + 6);
+
+    this.x = x; this.y = y;
+    const len = Math.hypot(x - center.x, y - center.y) || 1;
+    const sp = rand(...CONFIG.speed);
+    this.vx = ((x - center.x) / len) * sp;
+    this.vy = ((y - center.y) / len) * sp;
+
+    this.isStar = Math.random() < CONFIG.starShare;
+    this.isPremium = this.isStar && Math.random() < CONFIG.premiumShare;
+    this.size = this.isStar ? rand(...CONFIG.starSize) : rand(...CONFIG.sparkleSize);
+    this.color = pick(CONFIG.colors);
+    this.angle = this.isStar ? rand(-0.5, 0.5) : rand(-0.15, 0.15);
+    this.spin = (rand(...CONFIG.rotation) * Math.PI) / 180 * (this.isStar ? 1 : 0.3);
+    this.maxAlpha = rand(0.75, 1);
+
+    this.life = rand(...CONFIG.life);
+    // при первом запуске частицы стартуют с разных фаз, чтобы не было «волны»
+    this.t = initial ? Math.random() * this.life : 0;
+  }
+
+  update(dt) {
+    this.t += dt;
+    if (this.t >= this.life) { this.reset(false); return; }
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.angle += this.spin * dt;
+  }
+
+  draw(ctx) {
+    const p = this.t / this.life;
+    const { fadeIn, fadeOut } = CONFIG;
+    let k = 1;
+    if (p < fadeIn) k = p / fadeIn;
+    else if (p > 1 - fadeOut) k = (1 - p) / fadeOut;
+    k = k * k * (3 - 2 * k); // smoothstep
+
+    const scale = 0.4 + 0.6 * k;
+    ctx.save();
+    ctx.globalAlpha = k * this.maxAlpha;
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.scale(scale, scale);
+    if (this.isPremium) drawPremiumStar(ctx, this.size, this.color);
+    else if (this.isStar) drawStar(ctx, this.size, this.color);
+    else drawSparkle(ctx, this.size, this.color);
+    ctx.restore();
+  }
+}
+
+/* ---------- запуск ---------- */
+
+const root = document.getElementById('stars');
+const canvas = root.querySelector('canvas');
+const ctx = canvas.getContext('2d');
+const particles = Array.from({ length: CONFIG.count }, () => new Particle(true));
+
+let k = 1;
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = root.clientWidth, h = root.clientHeight;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  k = (w / CONFIG.baseWidth) * dpr;
+}
+new ResizeObserver(resize).observe(root);
+resize();
+
+// ?static — один неподвижный кадр (для экспорта в PNG): большинство частиц видны полностью
+if (new URLSearchParams(location.search).has('static')) {
+  for (const p of particles) {
+    const full = Math.random() < 0.8;
+    p.t = p.life * (full ? rand(CONFIG.fadeIn, 1 - CONFIG.fadeOut) : rand(0.1, 0.95));
+  }
+  const drawStatic = () => {
+    resize(); // смена размера canvas очищает его — перерисовываем
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    for (const p of particles) p.draw(ctx);
+  };
+  new ResizeObserver(drawStatic).observe(root);
+} else requestAnimationFrame(frame);
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(k, 0, 0, k, 0, 0);
+  for (const p of particles) { p.update(dt); p.draw(ctx); }
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
